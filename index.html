@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1b1430">
+<title>Find Sunlight</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: Inter, -apple-system, system-ui, sans-serif; color: #fff; -webkit-font-smoothing: antialiased;
+    background: linear-gradient(180deg, #2c2448 0%, #7a4656 46%, #e0874a 63%, #6e4a3c 63.2%, #241c33 100%);
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .sun { position: fixed; left: 50%; top: 63%; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
+    background: radial-gradient(circle, #fff 0 30%, rgba(255,236,200,.85) 45%, rgba(255,210,150,0) 72%);
+    animation: rise 6s ease-in-out infinite alternate; }
+  @keyframes rise { to { transform: translateY(-14px); } }
+  .card { position: relative; width: min(440px, 100%); padding: 34px 30px 28px; border-radius: 30px; text-align: center;
+    background: rgba(18,14,38,.42); backdrop-filter: blur(24px) saturate(1.2); -webkit-backdrop-filter: blur(24px) saturate(1.2);
+    border: 1px solid rgba(255,255,255,.16); box-shadow: 0 24px 70px rgba(0,0,0,.35); }
+  .eyebrow { font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: rgba(255,255,255,.65); }
+  h1 { font-family: Fraunces, Georgia, serif; font-weight: 300; font-size: 42px; margin: 8px 0 10px; }
+  p { color: rgba(255,255,255,.72); font-size: 15px; line-height: 1.5; font-weight: 300; }
+  .btn { display: block; width: 100%; margin-top: 24px; padding: 17px 20px; border: 0; border-radius: 18px; cursor: pointer;
+    font: 500 17px Inter, system-ui, sans-serif; color: #2a1606; text-decoration: none;
+    background: linear-gradient(180deg, #ffe7b8, #f6b764); box-shadow: 0 10px 30px rgba(246,183,100,.35); }
+  .btn:active { transform: scale(.985); }
+  .btn[disabled] { opacity: .6; }
+  .ghost { display: block; margin-top: 12px; padding: 13px; border-radius: 16px; color: #fff; text-decoration: none; font-size: 15px;
+    background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.16); }
+  .status { margin-top: 18px; min-height: 22px; font-size: 14px; color: rgba(255,255,255,.8); }
+  .status.err { color: #ffc2c2; }
+  .found { margin-top: 18px; padding: 14px; border-radius: 16px; background: rgba(255,255,255,.08); font-variant-numeric: tabular-nums; }
+  .found b { display: block; font-size: 20px; font-weight: 500; margin-top: 2px; }
+  .hidden { display: none !important; }
+  .spin { display: inline-block; width: 14px; height: 14px; margin-right: 8px; vertical-align: -2px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; animation: sp 1s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .fine { margin-top: 20px; font-size: 12px; color: rgba(255,255,255,.5); line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="sun"></div>
+<main class="card">
+  <div class="eyebrow">Sunlight</div>
+  <h1>Find my dimmer</h1>
+  <p id="intro">Connects to your Sunlight dimmer over Bluetooth, finds its address on the Wi-Fi, and opens the app.</p>
+
+  <button class="btn" id="find">Find my dimmer</button>
+  <div class="status" id="status"></div>
+  <div class="found hidden" id="found">Sunlight is at<b id="ip"></b></div>
+  <a class="btn hidden" id="open" href="#">Open Sunlight</a>
+
+  <div id="fallback">
+    <a class="ghost hidden" id="last" href="#">Open last address</a>
+    <a class="ghost" href="http://dimmer.local/sun.htm">Try dimmer.local</a>
+  </div>
+
+  <div class="fine" id="fine">On iPad or iPhone, open this page in the free <b>Bluefy</b> browser — Safari doesn't support Bluetooth.
+    Your device must be on the same Wi-Fi as the dimmer.</div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var SVC = '5a7e0001-6c1a-4d2f-9b3e-53756e4c6974';
+  var URL_CHAR = '5a7e0003-6c1a-4d2f-9b3e-53756e4c6974';
+  var IP_CHAR = '5a7e0002-6c1a-4d2f-9b3e-53756e4c6974';
+  var $ = function (id) { return document.getElementById(id); };
+
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+  function status(msg, err, busy) { var s = $('status'); s.innerHTML = (busy ? '<span class="spin"></span>' : '') + msg; s.className = 'status' + (err ? ' err' : ''); }
+
+  var last = store('sunlight.url');
+  if (last) { $('last').href = last; $('last').textContent = 'Open last address (' + last.replace(/^http:\/\/|\/sun\.htm$/g, '') + ')'; $('last').classList.remove('hidden'); }
+
+  var hasBT = !!(navigator.bluetooth && navigator.bluetooth.requestDevice);
+  if (!hasBT) {
+    $('find').disabled = true;
+    $('find').textContent = 'Bluetooth not available here';
+    status('This browser can\'t use Bluetooth. On iPad, open this page in Bluefy.', true);
+  } else {
+    $('fine').textContent = 'Your device must be on the same Wi-Fi as the dimmer.';
+  }
+
+  function decode(dv) { return new TextDecoder().decode(dv.buffer ? dv : new Uint8Array(dv)); }
+
+  $('find').onclick = function () {
+    $('find').disabled = true;
+    status('Looking for your dimmer…', false, true);
+    var device;
+    navigator.bluetooth.requestDevice({ filters: [{ services: [SVC] }, { namePrefix: 'Sunlight' }], optionalServices: [SVC] })
+      .then(function (d) { device = d; status('Connecting to ' + (d.name || 'Sunlight') + '…', false, true); return d.gatt.connect(); })
+      .then(function (server) { return server.getPrimaryService(SVC); })
+      .then(function (svc) { return Promise.all([svc.getCharacteristic(URL_CHAR), svc.getCharacteristic(IP_CHAR)]); })
+      .then(function (ch) { return Promise.all([ch[0].readValue(), ch[1].readValue()]); })
+      .then(function (v) {
+        var url = decode(v[0]).trim(), ip = decode(v[1]).trim();
+        try { device.gatt.disconnect(); } catch (e) {}
+        if (!url) throw new Error('The dimmer isn\'t on Wi-Fi yet (no address). Check its Wi-Fi and try again.');
+        store('sunlight.url', url);
+        $('ip').textContent = ip;
+        $('found').classList.remove('hidden');
+        $('open').href = url; $('open').classList.remove('hidden');
+        $('find').classList.add('hidden');
+        status('Opening…', false, true);
+        setTimeout(function () { location.href = url; }, 900);
+      })
+      .catch(function (e) {
+        $('find').disabled = false;
+        if (e && e.name === 'NotFoundError') status('No dimmer chosen. Make sure it\'s powered and nearby, then try again.', true);
+        else status((e && e.message) || 'Couldn\'t reach the dimmer.', true);
+      });
+  };
+})();
+</script>
+</body>
+</html>
